@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.send('Bot online!');
+  res.send('Bot online! v2');
 });
 
 app.post('/enviar', (req, res) => {
