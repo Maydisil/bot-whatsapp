@@ -7,13 +7,11 @@ const {
   DisconnectReason
 } = require('@whiskeysockets/baileys');
 
-const qrcode = require('qrcode-terminal');
-
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-let sock;
+let sock = null;
 
 // iniciar WhatsApp
 async function startBot() {
@@ -25,20 +23,39 @@ async function startBot() {
   });
 
   sock.ev.on('connection.update', (update) => {
-    const { connection, qr } = update;
+    const { connection, qr, lastDisconnect } = update;
 
+    // QR CODE
     if (qr) {
-      console.log("ESCANEIE O QR CODE:");
-      qrcode.generate(qr, { small: true });
+      console.log("\n==============================");
+      console.log("QR CODE GERADO:");
+      console.log(
+        "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" +
+        encodeURIComponent(qr)
+      );
+      console.log("==============================\n");
     }
 
+    // CONECTADO
     if (connection === 'open') {
-      console.log("WhatsApp conectado!");
+      console.log("✅ WhatsApp conectado!");
     }
 
+    // DESCONECTADO
     if (connection === 'close') {
-      console.log("Conexão fechada, reiniciando...");
-      startBot();
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+
+      const shouldReconnect =
+        statusCode !== DisconnectReason.loggedOut;
+
+      console.log("❌ Conexão fechada");
+
+      if (shouldReconnect) {
+        console.log("🔄 Reconectando...");
+        startBot();
+      } else {
+        console.log("🚫 Logout detectado. Precisa novo QR.");
+      }
     }
   });
 
@@ -51,25 +68,36 @@ app.post('/enviar', async (req, res) => {
     const { numero, mensagem } = req.body;
 
     if (!sock) {
-      return res.json({ ok: false, erro: "WhatsApp ainda não conectado" });
+      return res.json({
+        ok: false,
+        erro: "WhatsApp ainda não conectado"
+      });
     }
 
     await sock.sendMessage(numero, {
       text: mensagem
     });
 
-    res.json({ ok: true, enviado: true });
+    return res.json({
+      ok: true,
+      enviado: true
+    });
 
   } catch (e) {
-    res.json({ ok: false, erro: e.message });
+    return res.json({
+      ok: false,
+      erro: e.message
+    });
   }
 });
 
+// teste básico
 app.get('/', (req, res) => {
   res.send('Bot WhatsApp online');
 });
 
+// iniciar servidor
 app.listen(PORT, () => {
-  console.log("Servidor rodando na porta", PORT);
+  console.log("🚀 Servidor rodando na porta", PORT);
   startBot();
 });
