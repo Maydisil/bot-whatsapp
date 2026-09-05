@@ -1,103 +1,286 @@
 const express = require('express');
-const app = express();
+const pino = require('pino');
 
 const {
   default: makeWASocket,
   useMultiFileAuthState,
-  DisconnectReason
+  DisconnectReason,
+  fetchLatestBaileysVersion
 } = require('@whiskeysockets/baileys');
+
+const app = express();
 
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
 let sock = null;
+let iniciando = false;
 
-// iniciar WhatsApp
+
+// ==============================
+// INICIAR WHATSAPP
+// ==============================
+
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth');
 
-  sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false
-  });
+  if (iniciando) return;
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, qr, lastDisconnect } = update;
+  iniciando = true;
 
-    // QR CODE
-    if (qr) {
-      console.log("\n==============================");
-      console.log("QR CODE GERADO:");
-      console.log(
-        "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" +
-        encodeURIComponent(qr)
-      );
-      console.log("==============================\n");
-    }
+  try {
 
-    // CONECTADO
-    if (connection === 'open') {
-      console.log("✅ WhatsApp conectado!");
-    }
+    console.log("🚀 Iniciando WhatsApp...");
 
-    // DESCONECTADO
-    if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
+    const { state, saveCreds } =
+      await useMultiFileAuthState('./auth');
 
-      const shouldReconnect =
-        statusCode !== DisconnectReason.loggedOut;
+    // Pega a versão atual do WhatsApp
+    const { version, isLatest } =
+      await fetchLatestBaileysVersion();
 
-      console.log("❌ Conexão fechada");
+    console.log(
+      "📱 Versão WhatsApp:",
+      version.join('.'),
+      " | Atual:",
+      isLatest
+    );
 
-      if (shouldReconnect) {
-        console.log("🔄 Reconectando...");
-        startBot();
-      } else {
-        console.log("🚫 Logout detectado. Precisa novo QR.");
+    sock = makeWASocket({
+
+      version,
+
+      auth: state,
+
+      logger: pino({
+        level: 'silent'
+      }),
+
+      printQRInTerminal: false,
+
+      browser: [
+        'Chrome',
+        'Windows',
+        '10'
+      ]
+
+    });
+
+
+    // ==============================
+    // EVENTOS DE CONEXÃO
+    // ==============================
+
+    sock.ev.on('connection.update', (update) => {
+
+      const {
+        connection,
+        qr,
+        lastDisconnect
+      } = update;
+
+
+      // ==============================
+      // QR CODE
+      // ==============================
+
+      if (qr) {
+
+        console.log("");
+        console.log("==============================");
+        console.log("📲 QR CODE GERADO!");
+        console.log("==============================");
+
+        console.log(
+          "https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=" +
+          encodeURIComponent(qr)
+        );
+
+        console.log("==============================");
+        console.log("");
+
       }
-    }
-  });
 
-  sock.ev.on('creds.update', saveCreds);
+
+      // ==============================
+      // CONECTADO
+      // ==============================
+
+      if (connection === 'open') {
+
+        console.log("");
+        console.log("================================");
+        console.log("✅ WHATSAPP CONECTADO!");
+        console.log("================================");
+        console.log("");
+
+        iniciando = false;
+
+      }
+
+
+      // ==============================
+      // DESCONECTADO
+      // ==============================
+
+      if (connection === 'close') {
+
+        iniciando = false;
+
+        const statusCode =
+          lastDisconnect?.error?.output?.statusCode;
+
+        console.log("");
+        console.log("❌ Conexão fechada.");
+        console.log("Código:", statusCode);
+
+
+        const shouldReconnect =
+          statusCode !== DisconnectReason.loggedOut;
+
+
+        if (shouldReconnect) {
+
+          console.log(
+            "🔄 Tentando conectar novamente em 5 segundos..."
+          );
+
+          setTimeout(() => {
+            startBot();
+          }, 5000);
+
+        } else {
+
+          console.log(
+            "🚫 WhatsApp desconectado."
+          );
+
+          console.log(
+            "Será necessário gerar um novo QR Code."
+          );
+
+        }
+
+      }
+
+    });
+
+
+    // Salvar autenticação
+    sock.ev.on(
+      'creds.update',
+      saveCreds
+    );
+
+
+  } catch (error) {
+
+    iniciando = false;
+
+    console.error(
+      "❌ Erro ao iniciar WhatsApp:"
+    );
+
+    console.error(error);
+
+    setTimeout(() => {
+      startBot();
+    }, 10000);
+
+  }
+
 }
 
-// endpoint para enviar mensagem
+
+// ==============================
+// ENVIAR MENSAGEM
+// ==============================
+
 app.post('/enviar', async (req, res) => {
+
   try {
-    const { numero, mensagem } = req.body;
+
+    const {
+      numero,
+      mensagem
+    } = req.body;
+
+
+    if (!numero || !mensagem) {
+
+      return res.json({
+        ok: false,
+        erro: "Informe numero e mensagem"
+      });
+
+    }
+
 
     if (!sock) {
+
       return res.json({
         ok: false,
         erro: "WhatsApp ainda não conectado"
       });
+
     }
 
-    await sock.sendMessage(numero, {
-      text: mensagem
-    });
+
+    await sock.sendMessage(
+      numero,
+      {
+        text: mensagem
+      }
+    );
+
 
     return res.json({
       ok: true,
       enviado: true
     });
 
-  } catch (e) {
+
+  } catch (error) {
+
+    console.error(
+      "Erro ao enviar:",
+      error
+    );
+
     return res.json({
       ok: false,
-      erro: e.message
+      erro: error.message
     });
+
   }
+
 });
 
-// teste básico
+
+// ==============================
+// TESTE
+// ==============================
+
 app.get('/', (req, res) => {
-  res.send('Bot WhatsApp online');
+
+  res.send(
+    'Bot WhatsApp online'
+  );
+
 });
 
-// iniciar servidor
+
+// ==============================
+// SERVIDOR
+// ==============================
+
 app.listen(PORT, () => {
-  console.log("🚀 Servidor rodando na porta", PORT);
+
+  console.log(
+    "🚀 Servidor rodando na porta",
+    PORT
+  );
+
   startBot();
+
 });
