@@ -258,6 +258,49 @@ app.post('/enviar', async (req, res) => {
 
 
 // ==============================
+// TESTE ENVIANDO PARA O PRÓPRIO WHATSAPP
+// ==============================
+
+app.get('/teste', async (req, res) => {
+
+  try {
+
+    if (!sock || !sock.user) {
+      return res.json({
+        ok: false,
+        erro: "WhatsApp ainda não conectado"
+      });
+    }
+
+    const numeroDoBot = sock.user.id;
+
+    console.log("📱 Enviando teste para:", numeroDoBot);
+
+    await sock.sendMessage(numeroDoBot, {
+      text: "🚀 TESTE DO BOT!\n\nSe você recebeu esta mensagem, o WhatsApp está funcionando corretamente."
+    });
+
+    console.log("✅ Mensagem de teste enviada!");
+
+    return res.json({
+      ok: true,
+      enviado: true
+    });
+
+  } catch (error) {
+
+    console.error("❌ Erro no teste:", error);
+
+    return res.json({
+      ok: false,
+      erro: error.message
+    });
+
+  }
+
+});
+
+// ==============================
 // TESTE
 // ==============================
 
