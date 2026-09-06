@@ -191,7 +191,6 @@ async function startBot() {
 
 }
 
-
 // ==============================
 // ENVIAR MENSAGEM
 // ==============================
@@ -205,8 +204,17 @@ app.post('/enviar', async (req, res) => {
       mensagem
     } = req.body;
 
+    console.log("");
+    console.log("==============================");
+    console.log("📤 NOVO ENVIO");
+    console.log("📱 Destinatário:", numero);
+    console.log("💬 Mensagem:", mensagem);
+    console.log("==============================");
+
 
     if (!numero || !mensagem) {
+
+      console.log("❌ Número ou mensagem não informado.");
 
       return res.json({
         ok: false,
@@ -218,6 +226,8 @@ app.post('/enviar', async (req, res) => {
 
     if (!sock) {
 
+      console.log("❌ WhatsApp não conectado.");
+
       return res.json({
         ok: false,
         erro: "WhatsApp ainda não conectado"
@@ -226,26 +236,33 @@ app.post('/enviar', async (req, res) => {
     }
 
 
-    await sock.sendMessage(
-      numero,
-      {
-        text: mensagem
-      }
-    );
+    console.log("📡 Tentando enviar pelo WhatsApp...");
+
+
+    const resultado = await sock.sendMessage(numero, {
+      text: mensagem
+    });
+
+
+    console.log("✅ sendMessage executado!");
+    console.log("🆔 Resultado:", JSON.stringify(resultado));
 
 
     return res.json({
       ok: true,
-      enviado: true
+      enviado: true,
+      resultado: resultado
     });
 
 
   } catch (error) {
 
-    console.error(
-      "Erro ao enviar:",
-      error
-    );
+    console.error("");
+    console.error("==============================");
+    console.error("❌ ERRO AO ENVIAR");
+    console.error(error);
+    console.error("==============================");
+
 
     return res.json({
       ok: false,
@@ -255,7 +272,6 @@ app.post('/enviar', async (req, res) => {
   }
 
 });
-
 
 // ==============================
 // TESTE ENVIANDO PARA O PRÓPRIO WHATSAPP
